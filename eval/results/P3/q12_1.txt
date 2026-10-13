@@ -1,0 +1,37 @@
+**现在看不出来具体原因；优先怀疑加索引后执行计划变了，大量回表把查询拖慢了。**
+
+普通 `Index Scan` 先从索引找到行位置，再访问表页取数据。如果条件命中很多行，而且这些行分散在大量表页上，就会产生昂贵的随机访问。原来的顺序扫描可以连续读表，甚至并行执行，反而更快。例如千万行表里 `status = 'active'` 命中几百万行，就很容易出现这种情况。[扫描方式说明](https://www.postgresql.org/docs/current/using-explain.html)
+
+重点按这三种情况查：
+
+| 计划里的现象 | 判断和处理 |
+|---|---|
+| `Index Scan` 命中大量行，访问大量缓冲页 | 索引筛选能力弱、回表成本高；比较顺序扫描和位图扫描 |
+| 估算 `rows` 很小，`actual rows` 大几十倍甚至更多 | 优化器低估了数据量；先执行 `ANALYZE 表名`，仍偏差很大再提高列统计目标，多列相关条件考虑扩展统计 |
+| `Rows Removed by Filter` 很大 | 索引只筛掉了一部分数据，其余条件在回表后过滤；按完整查询评估联合索引 |
+
+统计信息直接影响优化器对命中行数和计划成本的判断。[统计信息说明](https://www.postgresql.org/docs/current/planner-stats.html)
+
+**先保留当前计划，再做一次对照：**
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;  -- 原查询，使用实际参数
+
+-- 在同一连接中，临时关闭索引扫描路径做对照
+BEGIN;
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;  -- 相同查询、相同参数
+
+ROLLBACK;
+```
+
+在相近负载下交替跑几次，比较 `Execution Time`、扫描节点的估算/实际行数和 `Buffers`。这些开关用于诊断，事务结束后恢复。[计划开关说明](https://www.postgresql.org/docs/current/runtime-config-query.html)
+
+如果关闭索引扫描后明显更快，就确认当前计划选择有问题，继续查统计信息和回表成本；如果前后计划相同，则转查缓存、磁盘负载和等待事件。
+
+贴出 **SQL、索引定义和两份执行计划**，就能进一步判断该更新统计信息、改联合索引，还是保留顺序扫描。

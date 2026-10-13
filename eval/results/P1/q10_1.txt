@@ -1,0 +1,25 @@
+慢在 `x not in result`：列表查找需要逐个比较，结果越长，每次查找越慢。整体时间复杂度是 **O(n²)**；10 万条数据全部不重复时，约需 **50 亿次比较**。
+
+如果元素可哈希（例如整数、字符串），直接改成：
+
+```python
+def dedup(items):
+    return list(dict.fromkeys(items))
+```
+
+这会保留首次出现的顺序，平均时间复杂度降为 **O(n)**，空间复杂度为 **O(n)**。
+
+如果想保留原来的循环结构，也可以用集合加速查找：
+
+```python
+def dedup(items):
+    seen = set()
+    result = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            result.append(x)
+    return result
+```
+
+这两种写法都要求元素可哈希。若元素是列表或字典，需要按去重规则转换成可哈希的键，例如用记录的 `id` 判断重复。

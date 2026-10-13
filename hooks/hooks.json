@@ -1,0 +1,18 @@
+{
+  "description": "Rewrite the final answer once when it contains negative scope disclaimers (optional, see README).",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.codex/hooks/hedge_gate.py",
+            "commandWindows": "python %USERPROFILE%\\.codex\\hooks\\hedge_gate.py",
+            "timeout": 30,
+            "statusMessage": "Checking for hedges"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+**大概率是新增索引让优化器选了更慢的执行计划，最常见的是大量回表导致随机读取成本过高。** 用执行计划对照，就能确认。
+
+原来顺序扫描按数据页读整张表；现在索引扫描先找到行位置，再逐条访问表数据。如果条件命中很多行，且这些行分散在大量数据页上，最终仍要访问大部分表页，还增加了索引访问开销。原来的并行顺序扫描可能更快。[官方说明](https://www.postgresql.org/docs/current/using-explain.html)
+
+优先查这几个原因：
+
+- **条件筛选能力弱**：例如状态字段的大多数记录都是 `active`，查这个值需要大量回表。
+- **优化器低估了命中行数**：预计返回几百行，实际几十万行，于是选了索引扫描。常见来源是统计信息陈旧、数据倾斜、多列条件存在关联；对应处理是 `ANALYZE`、提高相关列的统计目标、建立扩展统计。[统计信息文档](https://www.postgresql.org/docs/current/planner-stats.html)
+- **成本参数过于乐观**：`random_page_cost` 设置过低，或 `effective_cache_size` 设置过高，会让优化器更偏向索引。需要按实际存储和缓存情况校准。[成本参数文档](https://www.postgresql.org/docs/current/runtime-config-query.html)
+- **整个计划发生变化**：有 JOIN 时，新增索引可能让 Hash Join 切成 Nested Loop，内层索引扫描执行几十万次。此时重点看 `loops`。[执行计划文档](https://www.postgresql.org/docs/current/using-explain.html)
+
+先对原 SELECT 执行：
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+```
+
+重点看估算 `rows` 与 `actual rows` 的差距、扫描节点的 `Buffers`、`Rows Removed by Filter`，以及 JOIN 内层的 `loops`。
+
+再在同一会话中临时关闭索引扫描做对照：
+
+```sql
+BEGIN;
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;  -- 原查询，使用相同参数
+ROLLBACK;
+```
+
+交替跑几轮，比较执行时间和缓冲区访问情况。如果关闭后稳定更快，就沿着**行数估算、回表成本、JOIN 方式**修正计划；这些开关用于诊断，长期配置保持原值。
+
+把原 SQL、`CREATE INDEX` 语句和两份执行计划贴出来，就能定位具体慢在哪个节点。

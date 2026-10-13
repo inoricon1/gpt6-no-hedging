@@ -1,0 +1,30 @@
+**大概率是新增索引改变了执行计划，让 PostgreSQL 选中了实际更贵的访问路径。** 我会先查“命中行数被低估，导致大量回表读取”这条线。
+
+普通 `Index Scan` 先查索引，再到表里取行。假设一亿行里命中两千万行，而且这些行分散在大量数据页上，索引扫描就要付出遍历索引和分散访问表页的成本；顺序扫描整张表反而可能更快。[官方执行计划说明](https://www.postgresql.org/docs/current/using-explain.html)
+
+重点看这三种情况：
+
+- **行数估错了**：计划里预计 `rows=100`，实际 `actual rows=1000000`。统计信息过旧、值分布倾斜、多字段相关都可能造成这种偏差。先执行 `ANALYZE 表名;`；仍然偏差大，再提高相关列的统计目标或建立扩展统计。[统计信息说明](https://www.postgresql.org/docs/current/planner-stats.html)
+- **索引只筛掉少量数据**：`Index Cond` 命中很多行，回表后又由 `Filter` 丢掉大部分，`Rows Removed by Filter` 很高。此时应围绕完整查询条件设计复合索引。
+- **整个计划变了**：新增索引可能让连接切到 `Nested Loop`，内层索引扫描执行几十万次。看内层节点的 `loops`，以及原来的并行扫描、连接方式是否发生变化。[执行计划示例](https://www.postgresql.org/docs/current/using-explain.html)
+
+最快的验证方法是保留当前计划，再在同一连接中做一次临时对照：
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+BEGIN;
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+ROLLBACK;
+```
+
+交替执行几轮，对比 `Execution Time`、扫描节点的估计/实际行数和 `Buffers`。关闭索引扫描后稳定更快，就优先修正行数估计和索引设计；这些开关用于诊断，事务结束后自动恢复。[计划控制参数](https://www.postgresql.org/docs/current/runtime-config-query.html)
+
+把 **SQL、`CREATE INDEX` 和两份执行计划**贴出来，就能定位慢在回表、过滤还是连接上。

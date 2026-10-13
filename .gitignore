@@ -1,0 +1,3 @@
+__pycache__/
+eval/judge_wd/
+eval/results/*/*.json

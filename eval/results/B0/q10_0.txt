@@ -1,0 +1,33 @@
+慢在这一行：
+
+```python
+if x not in result:
+```
+
+`result` 是列表，判断成员需要从头逐个比较。若 10 万条数据都不同，总共约需要 **50 亿次比较**，整体时间复杂度是 **O(n²)**。
+
+如果元素可哈希（如整数、字符串、由可哈希元素组成的元组），用集合记录已见元素，同时保留原来的顺序：
+
+```python
+def dedup(items):
+    seen = set()
+    result = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            result.append(x)
+    return result
+```
+
+集合的成员查询平均是 **O(1)**，因此整体平均是 **O(n)**，代价是多维护一个集合。
+
+也可以直接写成：
+
+```python
+def dedup(items):
+    return list(dict.fromkeys(items))
+```
+
+这同样保留首次出现的顺序，且要求元素可哈希。
+
+**如果元素是列表或字典**，不能直接放进集合；需要根据数据结构生成可哈希的键。例如，按字典的 `id` 字段去重，可以把上面代码中的集合查询和添加改为使用 `x["id"]`。但这会把去重规则改成“`id` 相同”，要确认符合你的需求。

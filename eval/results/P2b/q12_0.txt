@@ -1,0 +1,33 @@
+**我会优先怀疑：新增索引让优化器选了索引扫描，但实际命中行数多、回表分散，执行成本超过了原来的顺序扫描。**
+
+PostgreSQL 的普通索引扫描先读索引，再到表里取数据。假设一千万行中命中两百万行，而且这些行散布在大部分数据页上，索引路径就要付出“扫描索引＋大量分散回表”的成本；顺序扫描可以连续读表，原来的并行扫描还可能更快。[官方说明](https://www.postgresql.org/docs/current/indexes-index-only-scans.html)
+
+通常沿这三条查：
+
+- **行数估错了。** 计划估计命中几百行，实际返回几十万行。统计信息过旧、数据倾斜、多个条件之间有依赖，都容易触发这种情况。先执行 `ANALYZE 表名;`；偏差持续存在时，提高相关列的统计目标，或为关联条件创建扩展统计。[统计信息文档](https://www.postgresql.org/docs/current/planner-stats.html)
+- **索引只完成了一部分过滤。** `Index Cond` 找到大量候选行，回表后又被 `Filter` 丢掉。`Rows Removed by Filter` 很大时，优先考虑匹配完整查询条件的联合索引。
+- **整个计划换了。** 新索引可能引入执行很多次的 `Nested Loop`，或者为了 `ORDER BY … LIMIT` 沿索引扫描，却读了大量行才凑够结果。重点看 `loops`、过滤掉的行数和各节点耗时。[执行计划文档](https://www.postgresql.org/docs/current/using-explain.html)
+
+最快的定位办法是做一次对照。下面两处 `SELECT ...` 换成原查询，使用相同参数；`ANALYZE` 会实际执行查询：
+
+```sql
+BEGIN;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+ROLLBACK;
+```
+
+这些设置只作用于当前事务，用来取得偏向顺序扫描的对照计划。[参数文档](https://www.postgresql.org/docs/current/runtime-config-query.html)
+
+交替跑几轮，比较 `Execution Time`、`Buffers`，以及同一节点的估计 `rows` 与实际 `rows`。**顺序扫描持续更快，就沿行数估算和回表成本修；执行计划相同，则查缓存状态、并发 I/O 和锁等待。**
+
+把原 SQL、索引定义和两份计划贴出来，就能定位到具体节点。

@@ -1,0 +1,28 @@
+慢在 `x not in result`：每次都从头扫描列表，数据越多，检查一次就越费时。
+
+如果 10 万条数据全都不同，总共要做约 **50 亿次相等比较**，时间复杂度是 **O(n²)**。
+
+对于可哈希的元素（如整数、字符串、由可哈希元素组成的元组），直接改成：
+
+```python
+def dedup(items):
+    return list(dict.fromkeys(items))
+```
+
+字典通过哈希查找重复元素，平均时间复杂度降到 **O(n)**，同时保留原来的顺序和第一次出现的元素。额外空间为 **O(n)**。
+
+如果元素是 `list` 或 `dict`，需要先确定去重依据，例如用记录的 `id`：
+
+```python
+def dedup(items):
+    seen = set()
+    result = []
+    for x in items:
+        key = x["id"]
+        if key not in seen:
+            seen.add(key)
+            result.append(x)
+    return result
+```
+
+这里按 `id` 去重，保留该 `id` 第一次出现的记录；具体 `key` 应对应你的重复判定规则。

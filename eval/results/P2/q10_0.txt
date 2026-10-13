@@ -1,0 +1,29 @@
+瓶颈是 `x not in result`：它每次都从头扫描列表，数据大多互异时，总时间复杂度是 **O(n²)**。
+
+10 万条互异数据大约需要：
+
+```text
+0 + 1 + … + 99999 = 4,999,950,000 次元素比较
+```
+
+用 `set` 记录已经见过的元素，查询平均是 O(1)，整个函数平均降到 **O(n)**，同时保留首次出现的顺序：
+
+```python
+def dedup(items):
+    seen = set()
+    result = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            result.append(x)
+    return result
+```
+
+对于字符串、整数、可哈希元组等元素，也可以直接写：
+
+```python
+def dedup(items):
+    return list(dict.fromkeys(items))
+```
+
+两种写法都保留原顺序，额外空间为 O(n)。如果元素是字典或列表，需要先确定去重键，例如用字典的 `id` 字段做 `seen` 的键，`result` 中仍保存原对象。

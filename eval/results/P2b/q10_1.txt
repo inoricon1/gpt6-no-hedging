@@ -1,0 +1,32 @@
+慢在 `x not in result`：`result` 是列表，每次查重都要从头逐个比较。若 10 万条数据都不同，总比较次数约为：
+
+```text
+0 + 1 + ... + 99999 ≈ 50 亿次
+```
+
+所以时间复杂度是 **O(n²)**。
+
+如果元素是整数、字符串、元组等可哈希对象，直接用字典去重，保留首次出现的顺序：
+
+```python
+def dedup(items):
+    return list(dict.fromkeys(items))
+```
+
+字典通过哈希表查重，平均时间复杂度降到 **O(n)**，额外空间为 **O(n)**。
+
+如果元素是 `dict`、`list`，可以按业务唯一键去重。例如按字典的 `id` 字段，保留第一条：
+
+```python
+def dedup(items):
+    seen = set()
+    result = []
+    for x in items:
+        key = x["id"]
+        if key not in seen:
+            seen.add(key)
+            result.append(x)
+    return result
+```
+
+这里 `seen` 负责快速查重，`result` 负责保留原始数据和顺序。

@@ -1,0 +1,22 @@
+**会出现这种情况：索引扫描加上大量回表，成本会超过顺序扫描；优化器选中这个计划后，查询就会变慢。**
+
+优先检查以下原因：
+
+1. **条件命中的行太多，回表访问分散。** 普通索引扫描先找行位置，再去表里取数据。例如千万行表命中几百万行，且数据散布在大量页面上，索引读取和随机访问的开销会很大，顺序扫描更省。表越大，访问方式的影响越明显。[官方说明](https://www.postgresql.org/docs/current/using-explain.html)
+
+2. **优化器低估了命中行数。** 统计信息过期、数据分布倾斜、多条件之间存在关联，会造成估算偏差。优化器预计取几百行，实际取几十万行，就会选中昂贵的索引计划。[统计信息文档](https://www.postgresql.org/docs/current/planner-stats.html)
+
+3. **索引只解决了部分条件。** 比如查询有 `WHERE a = … AND b = …`，只给 `a` 建索引：先取出大量满足 `a` 的行，再逐行检查 `b`，仍然很费时。有 JOIN 时，新索引还会影响连接方式，重复执行大量索引查询。[执行计划文档](https://www.postgresql.org/docs/current/using-explain.html)
+
+4. **成本参数与实际环境有偏差。** `random_page_cost`、`effective_cache_size` 会影响索引计划的选择；前后测试的缓存状态和并发负载也会影响耗时。[查询规划配置](https://www.postgresql.org/docs/current/runtime-config-query.html)
+
+先看这条查询的实际执行计划：
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+```
+
+重点看 **使用了哪个索引、估算 `rows` 与实际 `rows` 的差距、`loops`、`Rows Removed by Filter` 和缓冲区读取数量**。如果行数估算偏差很大，先执行 `ANALYZE 表名;` 更新统计信息，再复测；比较时保持参数、缓存状态和负载相近。[诊断方法](https://www.postgresql.org/docs/current/using-explain.html)
+
+目前对具体归因的置信度低，因为还缺少 SQL、索引定义和实际执行计划。

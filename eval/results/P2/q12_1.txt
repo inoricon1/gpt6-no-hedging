@@ -1,0 +1,39 @@
+**大概率是新索引让优化器选了更慢的执行计划，最常见的是命中行多、分布散，回表成本超过了顺序扫描。**
+
+例如，千万行的表查出百万行，普通 `Index Scan` 要先查索引，再按行位置访问表页；匹配行散落在大量页上时，会产生大量随机访问。原来的 `Parallel Seq Scan` 顺序读表，加上并行执行，可能更快。决定成本的是访问了多少表页。[PostgreSQL 扫描示例](https://www.postgresql.org/docs/current/using-explain.html)
+
+优先查这三种情况：
+
+| 原因 | 执行计划里的证据 | 下一步 |
+|---|---|---|
+| 命中太多，回表昂贵 | `Index Scan` 实际返回行多，`Buffers` 访问量大 | 对比顺序扫描耗时 |
+| 优化器低估了命中行数 | 估算 `rows=100`，实际 `rows=100000` | 执行 `ANALYZE`；仍偏差大时，提高该列统计目标，多列相关条件考虑扩展统计 |
+| 新索引改变了整体计划 | 出现高 `loops` 的 `Nested Loop`，或大量 `Rows Removed by Filter` | 检查连接策略，以及索引是否覆盖主要过滤条件 |
+
+行数估算依赖统计信息，数据倾斜和多列相关性都可能让估算偏离实际。[统计信息文档](https://www.postgresql.org/docs/current/planner-stats.html)
+
+**先拿实际 SQL、实际参数跑：**
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+```
+
+然后在同一会话中做一次对照：
+
+```sql
+BEGIN;
+
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+ROLLBACK;
+```
+
+这些开关会抑制索引扫描路径；确认对照计划使用了 `Seq Scan` 或 `Parallel Seq Scan`。交替运行两种计划几次，比较稳定耗时和 `Buffers`，减少缓存冷热对结果的影响。[执行计划开关](https://www.postgresql.org/docs/current/runtime-config-query.html)
+
+**顺序扫描稳定更快，就优先修正行数估算和索引设计；计划保持一致，则转查 I/O、缓存和并发负载。** 把 SQL、索引定义及两份执行计划贴出来，就能定位具体慢在哪个节点。

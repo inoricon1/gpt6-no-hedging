@@ -1,0 +1,36 @@
+**最可能是新增索引让优化器换成了更慢的执行计划：它预计只需取少量行，实际却做了大量分散的回表读取。** 用 `EXPLAIN (ANALYZE, BUFFERS)` 看扫描节点和实际行数，就能定位。
+
+大表按顺序扫描时，可以连续读取数据页，也可能采用并行扫描。普通 `Index Scan` 则先查索引，再按行位置访问表；如果条件命中很多行，而且这些行散布在大量数据页上，“读索引＋回表”的成本就会超过直接扫表。比如查询占全表 30% 的某种状态，就很容易遇到这种情况。[PostgreSQL 执行计划文档](https://www.postgresql.org/docs/18/using-explain.html)
+
+优化器为什么选错？主要检查三处：
+
+| 执行计划中的现象 | 原因与处理 |
+|---|---|
+| 预计 `rows=100`，实际 `rows=100000` | 行数严重低估。先执行 `ANALYZE 表名;`；数据倾斜明显时提高该列统计目标，多个条件相关时建立扩展统计。 |
+| `Index Scan` 访问大量缓冲页，耗时集中在扫描节点 | 命中范围太大、回表分散。比较顺序扫描或位图扫描的耗时。 |
+| `Rows Removed by Filter` 很大，或 `Nested Loop` 内层 `loops` 很高 | 索引只处理了部分条件，或新计划放大了重复查询。按完整过滤条件设计联合索引，并检查连接策略。 |
+
+统计信息决定行数估算，列间相关性可以通过扩展统计表达。[统计信息文档](https://www.postgresql.org/docs/18/planner-stats.html)
+
+直接做一次对照，保留索引，在当前事务里临时关闭几种索引扫描：
+
+```sql
+-- 当前计划
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+-- 对照计划
+BEGIN;
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;
+
+ROLLBACK;
+```
+
+用相同参数，交替运行几次，比较 `Execution Time`、实际行数和 `Buffers`。如果对照计划持续更快，就沿着**行数估算和扫描成本**修；这些开关用于诊断，事务结束后恢复。[计划控制参数](https://www.postgresql.org/docs/18/runtime-config-query.html)
+
+如果前后执行计划完全相同，重点查缓存命中变化和同期 I/O 负载。把查询 SQL、索引定义和上述两份执行计划贴出来，就可以具体指出慢在哪个节点、该怎么改。

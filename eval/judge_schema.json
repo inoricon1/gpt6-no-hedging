@@ -1,0 +1,9 @@
+{"type":"object","additionalProperties":false,"required":["items"],
+ "properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,
+  "required":["id","hedge_sentences","hedge_count","verdict_first","substance","directness"],
+  "properties":{"id":{"type":"string"},
+   "hedge_sentences":{"type":"array","items":{"type":"string"}},
+   "hedge_count":{"type":"integer"},
+   "verdict_first":{"type":"boolean"},
+   "substance":{"type":"integer"},
+   "directness":{"type":"integer"}}}}}}

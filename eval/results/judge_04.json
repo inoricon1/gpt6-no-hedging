@@ -1,0 +1,82 @@
+{
+  "items": [
+    {
+      "id": "a032",
+      "hedge_sentences": [],
+      "hedge_count": 0,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 5
+    },
+    {
+      "id": "a033",
+      "hedge_sentences": [
+        "目前对具体归因的置信度低，因为还缺少 SQL、索引定义和实际执行计划。"
+      ],
+      "hedge_count": 1,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 4
+    },
+    {
+      "id": "a034",
+      "hedge_sentences": [
+        "当前证据不足以确认转化率提升。",
+        "下一步按最小有价值提升确定样本量和停止规则，再决定全量；当前提升方向的判断置信度低，因为样本误差远大于观察到的差异。"
+      ],
+      "hedge_count": 2,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 4
+    },
+    {
+      "id": "a035",
+      "hedge_sentences": [
+        "对“等待或局部瓶颈导致延迟”的判断置信度中等，具体原因需要慢请求分段耗时和资源等待指标来确定。"
+      ],
+      "hedge_count": 1,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 4
+    },
+    {
+      "id": "a036",
+      "hedge_sentences": [
+        "如果上线依据是“转化率提高”，目前证据不足。",
+        "这不代表没有效果，也不能证明不会伤害转化率。",
+        "当前更适合继续按预定方案实验，并检查转化观察窗口、分流和关键护栏指标；不要因为点估计略高就全量。"
+      ],
+      "hedge_count": 3,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 4
+    },
+    {
+      "id": "a037",
+      "hedge_sentences": [],
+      "hedge_count": 0,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 5
+    },
+    {
+      "id": "a038",
+      "hedge_sentences": [],
+      "hedge_count": 0,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 5
+    },
+    {
+      "id": "a039",
+      "hedge_sentences": [
+        "覆盖率衡量测试执行过多少代码，上线判断还要看断言质量、关键业务和真实环境验证。",
+        "对你们当前项目“可以放心上线”的置信度低，因为目前只知道覆盖率，缺少上述验收结果。"
+      ],
+      "hedge_count": 2,
+      "verdict_first": true,
+      "substance": 5,
+      "directness": 4
+    }
+  ]
+}
